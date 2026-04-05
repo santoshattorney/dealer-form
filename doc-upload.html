@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document Upload</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Roboto, Arial, sans-serif;
+      background: #f0ebf8;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    .header-bar { width: 100%; max-width: 640px; height: 10px; background: #673ab7; border-radius: 8px 8px 0 0; }
+    .card, .qcard {
+      background: white; width: 100%; max-width: 640px;
+      border-radius: 8px; padding: 24px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1); margin-bottom: 12px;
+    }
+    .card { border-radius: 0 0 8px 8px; }
+    .card h1 { font-size: 22px; color: #1a1a1a; margin-bottom: 6px; }
+    .card p { color: #666; font-size: 13px; }
+    label { display: block; font-size: 15px; color: #1a1a1a; margin-bottom: 10px; font-weight: 500; }
+    input[type="tel"], select {
+      width: 100%; border: none; border-bottom: 1px solid #ccc;
+      padding: 8px 0; font-size: 14px; outline: none; background: transparent;
+    }
+    input:focus, select:focus { border-bottom: 2px solid #673ab7; }
+    .upload-area {
+      border: 2px dashed #ccc; border-radius: 8px; padding: 30px;
+      text-align: center; cursor: pointer; margin-top: 8px; color: #888;
+    }
+    .upload-area input { display: none; }
+    .preview { margin-top: 12px; max-width: 100%; max-height: 200px; border-radius: 6px; display: none; }
+    .file-name { font-size: 13px; color: #333; margin-top: 8px; }
+    .error { color: #d32f2f; font-size: 13px; margin-top: 6px; display: none; }
+    .member-found { background: #f3e5f5; border-radius: 6px; padding: 10px 14px; margin-top: 10px; display: none; }
+    .member-found span { font-weight: bold; color: #512da8; }
+    .btn {
+      background: #673ab7; color: white; border: none;
+      padding: 11px 28px; border-radius: 4px; font-size: 14px;
+      cursor: pointer; margin-top: 16px; width: 100%;
+    }
+    .btn:hover { background: #512da8; }
+    .btn:disabled { background: #ccc; cursor: not-allowed; }
+    .progress { display: none; margin-top: 12px; }
+    .progress-bar { height: 4px; background: #e0e0e0; border-radius: 4px; overflow: hidden; }
+    .progress-fill { height: 100%; background: #673ab7; width: 0%; transition: width 0.3s; }
+    .success-msg { color: #2e7d32; font-size: 15px; font-weight: 500; }
+    #step2, #successCard { display: none; }
+  </style>
+</head>
+<body>
+
+<div class="header-bar"></div>
+<div class="card">
+  <h1>Document Upload</h1>
+  <p>Upload courier receipts, signed copies and bank receipts per member.</p>
+</div>
+
+<div class="qcard" id="step1">
+  <label>Member Phone Number</label>
+  <input type="tel" id="phoneInput" placeholder="Enter registered phone number" />
+  <div class="error" id="phoneError"></div>
+  <div class="member-found" id="memberFound">Member found: <span id="memberName"></span></div>
+  <button class="btn" id="findBtn" onclick="findMember()">Find Member</button>
+</div>
+
+<div class="qcard" id="step2">
+  <label>Document Type</label>
+  <select id="docType">
+    <option value="">-- Select document type --</option>
+    <option value="Courier Receipt">Courier Receipt (Notice Sent)</option>
+    <option value="Signed Copy">Signed Copy (Received from Member)</option>
+    <option value="Bank Receipt">Bank Receipt (Sent to Bank)</option>
+  </select>
+  <div style="margin-top: 24px;">
+    <label>Upload Document</label>
+    <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+      <input type="file" id="fileInput" accept="image/*,.pdf" onchange="handleFile(this)" />
+      <div id="uploadPrompt">&#128247; Tap to take photo or choose file<br><small>JPG, PNG or PDF</small></div>
+      <img id="preview" class="preview" />
+      <div class="file-name" id="fileName"></div>
+    </div>
+  </div>
+  <div class="error" id="uploadError"></div>
+  <div class="progress" id="progress">
+    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+    <p style="font-size:12px;color:#666;margin-top:6px;">Uploading to Google Drive...</p>
+  </div>
+  <button class="btn" id="uploadBtn" onclick="uploadDocument()">Upload Document</button>
+</div>
+
+<div class="qcard" id="successCard">
+  <p class="success-msg">&#10003; Document uploaded successfully!</p>
+  <p style="font-size:13px;color:#555;margin-top:8px;" id="successDetail"></p>
+  <button class="btn" style="background:#4caf50;margin-top:16px;" onclick="resetForm()">Upload Another Document</button>
+</div>
+
+<script>
+  var SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxurmJxSF8o2ZmfC-3YA8OZ8p9XTgd43dSeI2JuPc-CX9WGXRfBA4OZzqxmvEhivHLsWA/exec';
+  var currentPhone = '';
+  var currentMember = '';
+  var selectedFile = null;
+
+  function findMember() {
+    var phone = document.getElementById('phoneInput').value.trim();
+    var errorEl = document.getElementById('phoneError');
+    var btn = document.getElementById('findBtn');
+    if (!phone) { errorEl.textContent = 'Please enter a phone number.'; errorEl.style.display = 'block'; return; }
+    errorEl.style.display = 'none';
+    btn.disabled = true; btn.textContent = 'Searching...';
+
+    fetch(SCRIPT_URL + '?action=check&phone=' + encodeURIComponent(phone))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        btn.disabled = false; btn.textContent = 'Find Member';
+        if (data.found) {
+          currentPhone = phone;
+          currentMember = data.name;
+          document.getElementById('memberName').textContent = data.name;
+          document.getElementById('memberFound').style.display = 'block';
+          document.getElementById('step2').style.display = 'block';
+        } else {
+          errorEl.textContent = 'Phone number not found in records.';
+          errorEl.style.display = 'block';
+        }
+      })
+      .catch(function() {
+        btn.disabled = false; btn.textContent = 'Find Member';
+        errorEl.textContent = 'Error searching. Please try again.';
+        errorEl.style.display = 'block';
+      });
+  }
+
+  function handleFile(input) {
+    var file = input.files[0];
+    if (!file) return;
+    selectedFile = file;
+    document.getElementById('fileName').textContent = file.name;
+    document.getElementById('uploadPrompt').style.display = 'none';
+    if (file.type.startsWith('image/')) {
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        var p = document.getElementById('preview');
+        p.src = e.target.result; p.style.display = 'block';
+      };
+      reader.readAsDataURL(file);
+    }
+  }
+
+  function uploadDocument() {
+    var docType = document.getElementById('docType').value;
+    var errorEl = document.getElementById('uploadError');
+    var btn = document.getElementById('uploadBtn');
+    if (!docType) { errorEl.textContent = 'Please select a document type.'; errorEl.style.display = 'block'; return; }
+    if (!selectedFile) { errorEl.textContent = 'Please select a file.'; errorEl.style.display = 'block'; return; }
+    errorEl.style.display = 'none';
+    btn.disabled = true; btn.textContent = 'Uploading...';
+    document.getElementById('progress').style.display = 'block';
+
+    var fill = document.getElementById('progressFill');
+    var pct = 0;
+    var interval = setInterval(function() { pct = Math.min(pct + 4, 85); fill.style.width = pct + '%'; }, 300);
+
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      var base64 = e.target.result.split(',')[1];
+      var timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      var ext = selectedFile.name.split('.').pop();
+      var newName = docType.replace(/ /g, '_') + '_' + timestamp + '.' + ext;
+
+      fetch(SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({
+          action: 'upload',
+          phone: currentPhone,
+          docType: docType,
+          fileName: newName,
+          base64Data: base64,
+          mimeType: selectedFile.type
+        })
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        clearInterval(interval); fill.style.width = '100%';
+        btn.disabled = false; btn.textContent = 'Upload Document';
+        document.getElementById('progress').style.display = 'none';
+        if (data.success) {
+          document.getElementById('step1').style.display = 'none';
+          document.getElementById('step2').style.display = 'none';
+          document.getElementById('successCard').style.display = 'block';
+          document.getElementById('successDetail').textContent =
+            docType + ' uploaded for ' + currentMember + '. Sheet updated.';
+        } else {
+          errorEl.textContent = data.error || 'Upload failed. Try again.';
+          errorEl.style.display = 'block';
+        }
+      })
+      .catch(function() {
+        clearInterval(interval);
+        btn.disabled = false; btn.textContent = 'Upload Document';
+        document.getElementById('progress').style.display = 'none';
+        errorEl.textContent = 'Upload failed. Please try again.';
+        errorEl.style.display = 'block';
+      });
+    };
+    reader.readAsDataURL(selectedFile);
+  }
+
+  function resetForm() {
+    currentPhone = ''; currentMember = ''; selectedFile = null;
+    document.getElementById('phoneInput').value = '';
+    document.getElementById('docType').value = '';
+    document.getElementById('memberFound').style.display = 'none';
+    document.getElementById('preview').style.display = 'none';
+    document.getElementById('fileName').textContent = '';
+    document.getElementById('uploadPrompt').style.display = 'block';
+    document.getElementById('fileInput').value = '';
+    document.getElementById('step1').style.display = 'block';
+    document.getElementById('step2').style.display = 'none';
+    document.getElementById('successCard').style.display = 'none';
+  }
+</script>
+</body>
+</html>
