@@ -8,12 +8,8 @@
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
       font-family: Roboto, Arial, sans-serif;
-      background: #f0ebf8;
-      min-height: 100vh;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 20px;
+      background: #f0ebf8; min-height: 100vh;
+      display: flex; flex-direction: column; align-items: center; padding: 20px;
     }
     .header-bar { width: 100%; max-width: 640px; height: 10px; background: #673ab7; border-radius: 8px 8px 0 0; }
     .card, .qcard {
@@ -36,8 +32,8 @@
     }
     .upload-area input { display: none; }
     .preview { margin-top: 12px; max-width: 100%; max-height: 200px; border-radius: 6px; display: none; }
-    .file-name { font-size: 13px; color: #333; margin-top: 8px; }
-    .error { color: #d32f2f; font-size: 13px; margin-top: 6px; display: none; }
+    .file-name { font-size: 12px; color: #555; margin-top: 6px; }
+    .error { color: #d32f2f; font-size: 13px; margin-top: 6px; display: none; word-break: break-word; }
     .member-found { background: #f3e5f5; border-radius: 6px; padding: 10px 14px; margin-top: 10px; display: none; }
     .member-found span { font-weight: bold; color: #512da8; }
     .btn {
@@ -50,6 +46,7 @@
     .progress { display: none; margin-top: 12px; }
     .progress-bar { height: 4px; background: #e0e0e0; border-radius: 4px; overflow: hidden; }
     .progress-fill { height: 100%; background: #673ab7; width: 0%; transition: width 0.3s; }
+    .progress-label { font-size: 12px; color: #666; margin-top: 4px; }
     .success-msg { color: #2e7d32; font-size: 15px; font-weight: 500; }
     #step2, #successCard { display: none; }
   </style>
@@ -90,7 +87,7 @@
   <div class="error" id="uploadError"></div>
   <div class="progress" id="progress">
     <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-    <p style="font-size:12px;color:#666;margin-top:6px;">Uploading to Google Drive...</p>
+    <div class="progress-label" id="progressLabel">Processing...</div>
   </div>
   <button class="btn" id="uploadBtn" onclick="uploadDocument()">Upload Document</button>
 </div>
@@ -130,9 +127,9 @@
           errorEl.style.display = 'block';
         }
       })
-      .catch(function() {
+      .catch(function(err) {
         btn.disabled = false; btn.textContent = 'Find Member';
-        errorEl.textContent = 'Error searching. Please try again.';
+        errorEl.textContent = 'Error: ' + err.message;
         errorEl.style.display = 'block';
       });
   }
@@ -141,7 +138,6 @@
     var file = input.files[0];
     if (!file) return;
     selectedFile = file;
-    document.getElementById('fileName').textContent = file.name;
     document.getElementById('uploadPrompt').style.display = 'none';
     if (file.type.startsWith('image/')) {
       var reader = new FileReader();
@@ -150,7 +146,31 @@
         p.src = e.target.result; p.style.display = 'block';
       };
       reader.readAsDataURL(file);
+      document.getElementById('fileName').textContent = file.name + ' (' + (file.size / 1024).toFixed(0) + ' KB — will be compressed)';
+    } else {
+      document.getElementById('fileName').textContent = file.name + ' (' + (file.size / 1024).toFixed(0) + ' KB)';
     }
+  }
+
+  // Compress image using canvas — max 1200px, 80% quality
+  function compressImage(file, callback) {
+    if (!file.type.startsWith('image/')) { callback(file); return; }
+    var img = new Image();
+    var url = URL.createObjectURL(file);
+    img.onload = function() {
+      URL.revokeObjectURL(url);
+      var MAX = 1200;
+      var w = img.width, h = img.height;
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+        else { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      var canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      canvas.toBlob(function(blob) { callback(blob); }, 'image/jpeg', 0.80);
+    };
+    img.src = url;
   }
 
   function uploadDocument() {
@@ -160,57 +180,66 @@
     if (!docType) { errorEl.textContent = 'Please select a document type.'; errorEl.style.display = 'block'; return; }
     if (!selectedFile) { errorEl.textContent = 'Please select a file.'; errorEl.style.display = 'block'; return; }
     errorEl.style.display = 'none';
-    btn.disabled = true; btn.textContent = 'Uploading...';
+    btn.disabled = true; btn.textContent = 'Processing...';
     document.getElementById('progress').style.display = 'block';
+    setProgress(10, 'Compressing image...');
 
-    var fill = document.getElementById('progressFill');
-    var pct = 0;
-    var interval = setInterval(function() { pct = Math.min(pct + 4, 85); fill.style.width = pct + '%'; }, 300);
+    compressImage(selectedFile, function(processedFile) {
+      setProgress(30, 'Preparing upload...');
+      var reader = new FileReader();
+      reader.onload = function(e) {
+        setProgress(50, 'Uploading to Google Drive...');
+        var base64 = e.target.result.split(',')[1];
+        var timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+        var ext = selectedFile.type.startsWith('image/') ? 'jpg' : selectedFile.name.split('.').pop();
+        var newName = docType.replace(/ /g, '_') + '_' + timestamp + '.' + ext;
+        var mimeType = selectedFile.type.startsWith('image/') ? 'image/jpeg' : selectedFile.type;
 
-    var reader = new FileReader();
-    reader.onload = function(e) {
-      var base64 = e.target.result.split(',')[1];
-      var timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-      var ext = selectedFile.name.split('.').pop();
-      var newName = docType.replace(/ /g, '_') + '_' + timestamp + '.' + ext;
-
-      fetch(SCRIPT_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'text/plain' },
-        body: JSON.stringify({
-          action: 'upload',
-          phone: currentPhone,
-          docType: docType,
-          fileName: newName,
-          base64Data: base64,
-          mimeType: selectedFile.type
+        fetch(SCRIPT_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'text/plain' },
+          body: JSON.stringify({
+            action: 'upload',
+            phone: currentPhone,
+            docType: docType,
+            fileName: newName,
+            base64Data: base64,
+            mimeType: mimeType
+          })
         })
-      })
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        clearInterval(interval); fill.style.width = '100%';
-        btn.disabled = false; btn.textContent = 'Upload Document';
-        document.getElementById('progress').style.display = 'none';
-        if (data.success) {
-          document.getElementById('step1').style.display = 'none';
-          document.getElementById('step2').style.display = 'none';
-          document.getElementById('successCard').style.display = 'block';
-          document.getElementById('successDetail').textContent =
-            docType + ' uploaded for ' + currentMember + '. Sheet updated.';
-        } else {
-          errorEl.textContent = data.error || 'Upload failed. Try again.';
+        .then(function(r) {
+          if (!r.ok) return r.text().then(function(t) { throw new Error('Server error ' + r.status + ': ' + t.slice(0, 100)); });
+          return r.json();
+        })
+        .then(function(data) {
+          setProgress(100, 'Done!');
+          btn.disabled = false; btn.textContent = 'Upload Document';
+          setTimeout(function() { document.getElementById('progress').style.display = 'none'; }, 500);
+          if (data.success) {
+            document.getElementById('step1').style.display = 'none';
+            document.getElementById('step2').style.display = 'none';
+            document.getElementById('successCard').style.display = 'block';
+            document.getElementById('successDetail').textContent =
+              docType + ' uploaded for ' + currentMember + '. Sheet updated.';
+          } else {
+            errorEl.textContent = 'Failed: ' + (data.error || 'Unknown error');
+            errorEl.style.display = 'block';
+          }
+        })
+        .catch(function(err) {
+          document.getElementById('progress').style.display = 'none';
+          btn.disabled = false; btn.textContent = 'Upload Document';
+          errorEl.textContent = 'Error: ' + err.message;
           errorEl.style.display = 'block';
-        }
-      })
-      .catch(function() {
-        clearInterval(interval);
-        btn.disabled = false; btn.textContent = 'Upload Document';
-        document.getElementById('progress').style.display = 'none';
-        errorEl.textContent = 'Upload failed. Please try again.';
-        errorEl.style.display = 'block';
-      });
-    };
-    reader.readAsDataURL(selectedFile);
+        });
+      };
+      reader.readAsDataURL(processedFile);
+    });
+  }
+
+  function setProgress(pct, label) {
+    document.getElementById('progressFill').style.width = pct + '%';
+    document.getElementById('progressLabel').textContent = label;
   }
 
   function resetForm() {
