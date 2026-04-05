@@ -146,31 +146,15 @@
         p.src = e.target.result; p.style.display = 'block';
       };
       reader.readAsDataURL(file);
-      document.getElementById('fileName').textContent = file.name + ' (' + (file.size / 1024).toFixed(0) + ' KB — will be compressed)';
+      document.getElementById('fileName').textContent = file.name + ' (' + (file.size / 1024).toFixed(0) + ' KB)';
     } else {
       document.getElementById('fileName').textContent = file.name + ' (' + (file.size / 1024).toFixed(0) + ' KB)';
     }
   }
 
-  // Compress image using canvas — max 1200px, 80% quality
+  // No compression — upload original file as-is
   function compressImage(file, callback) {
-    if (!file.type.startsWith('image/')) { callback(file); return; }
-    var img = new Image();
-    var url = URL.createObjectURL(file);
-    img.onload = function() {
-      URL.revokeObjectURL(url);
-      var MAX = 1200;
-      var w = img.width, h = img.height;
-      if (w > MAX || h > MAX) {
-        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
-        else { w = Math.round(w * MAX / h); h = MAX; }
-      }
-      var canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-      canvas.toBlob(function(blob) { callback(blob); }, 'image/jpeg', 0.80);
-    };
-    img.src = url;
+    callback(file);
   }
 
   function uploadDocument() {
@@ -191,9 +175,9 @@
         setProgress(50, 'Uploading to Google Drive...');
         var base64 = e.target.result.split(',')[1];
         var timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-        var ext = selectedFile.type.startsWith('image/') ? 'jpg' : selectedFile.name.split('.').pop();
+        var ext = selectedFile.name.split('.').pop();
         var newName = docType.replace(/ /g, '_') + '_' + timestamp + '.' + ext;
-        var mimeType = selectedFile.type.startsWith('image/') ? 'image/jpeg' : selectedFile.type;
+        var mimeType = selectedFile.type || 'application/octet-stream';
 
         fetch(SCRIPT_URL, {
           method: 'POST',
