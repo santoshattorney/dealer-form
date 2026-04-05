@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Additional Information Requested - Dealer Name</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Google Sans', Roboto, Arial, sans-serif;
+      background: #f0ebf8;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 20px;
+    }
+    .header-bar { width: 100%; max-width: 640px; height: 10px; background: #673ab7; border-radius: 8px 8px 0 0; }
+    .card, .question-card {
+      background: white;
+      width: 100%;
+      max-width: 640px;
+      border-radius: 8px;
+      padding: 24px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+      margin-bottom: 12px;
+    }
+    .card { border-radius: 0 0 8px 8px; }
+    .card h1 { font-size: 24px; color: #1a1a1a; margin-bottom: 8px; }
+    .card p { color: #555; font-size: 14px; }
+    label { display: block; font-size: 16px; color: #1a1a1a; margin-bottom: 12px; }
+    input[type="text"], input[type="tel"] {
+      width: 100%; border: none; border-bottom: 1px solid #ccc;
+      padding: 8px 0; font-size: 14px; outline: none; color: #1a1a1a;
+    }
+    input:focus { border-bottom: 2px solid #673ab7; }
+    .error { color: #d32f2f; font-size: 13px; margin-top: 8px; display: none; }
+    .btn {
+      background: #673ab7; color: white; border: none;
+      padding: 10px 24px; border-radius: 4px; font-size: 14px;
+      cursor: pointer; margin-top: 16px;
+    }
+    .btn:hover { background: #512da8; }
+    .btn:disabled { background: #ccc; cursor: not-allowed; }
+    .success { color: #2e7d32; font-size: 15px; font-weight: 500; }
+    #section2, #successMsg { display: none; }
+  </style>
+</head>
+<body>
+  <div class="header-bar"></div>
+  <div class="card">
+    <h1>Additional Information Requested - Dealer Name</h1>
+    <p>Enter your registered phone number to continue.</p>
+  </div>
+
+  <div class="question-card" id="section1">
+    <label>Phone Number <span style="color:red">*</span></label>
+    <input type="tel" id="phoneInput" placeholder="Enter your phone number" />
+    <div class="error" id="phoneError"></div>
+    <button class="btn" id="nextBtn" onclick="verifyPhone()">Next</button>
+  </div>
+
+  <div class="question-card" id="section2">
+    <label>Dealer Name <span style="color:red">*</span></label>
+    <input type="text" id="dealerInput" placeholder="Enter dealer name" />
+    <div class="error" id="dealerError">Please enter a dealer name.</div>
+    <button class="btn" id="submitBtn" onclick="submitForm()">Submit</button>
+  </div>
+
+  <div class="question-card" id="successMsg">
+    <p class="success">&#10003; Response recorded. Thank you!</p>
+  </div>
+
+  <script>
+    var SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwswcNYDk4qga5LgDY-j2uSiYo9xH8fioNLyOjAvWlCqY9L7CA3NTjzBpCR5bedhBXc/exec';
+    var sessionToken = '';
+    var verifiedPhone = '';
+
+    function verifyPhone() {
+      var phone = document.getElementById('phoneInput').value.trim();
+      var errorEl = document.getElementById('phoneError');
+      var btn = document.getElementById('nextBtn');
+      if (!phone) { errorEl.textContent = 'Please enter a phone number.'; errorEl.style.display = 'block'; return; }
+      errorEl.style.display = 'none';
+      btn.disabled = true; btn.textContent = 'Checking...';
+
+      fetch(SCRIPT_URL + '?action=check&phone=' + encodeURIComponent(phone))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          btn.disabled = false; btn.textContent = 'Next';
+          if (data.found) {
+            verifiedPhone = phone;
+            sessionToken = data.token;
+            document.getElementById('section1').style.display = 'none';
+            document.getElementById('section2').style.display = 'block';
+          } else {
+            errorEl.textContent = 'Phone number mismatch. Please enter a registered number.';
+            errorEl.style.display = 'block';
+          }
+        })
+        .catch(function() {
+          btn.disabled = false; btn.textContent = 'Next';
+          errorEl.textContent = 'Error checking number. Please try again.';
+          errorEl.style.display = 'block';
+        });
+    }
+
+    function submitForm() {
+      var dealer = document.getElementById('dealerInput').value.trim();
+      var errorEl = document.getElementById('dealerError');
+      var btn = document.getElementById('submitBtn');
+      if (!dealer) { errorEl.style.display = 'block'; return; }
+      errorEl.style.display = 'none';
+      btn.disabled = true; btn.textContent = 'Submitting...';
+
+      fetch(SCRIPT_URL + '?action=submit&phone=' + encodeURIComponent(verifiedPhone) + '&dealer=' + encodeURIComponent(dealer) + '&token=' + encodeURIComponent(sessionToken))
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+          if (data.success) {
+            document.getElementById('section2').style.display = 'none';
+            document.getElementById('successMsg').style.display = 'block';
+          } else {
+            btn.disabled = false; btn.textContent = 'Submit';
+            errorEl.textContent = data.error || 'Submission failed. Please try again.';
+            errorEl.style.display = 'block';
+          }
+        })
+        .catch(function() {
+          btn.disabled = false; btn.textContent = 'Submit';
+          errorEl.textContent = 'Submission failed. Please try again.';
+          errorEl.style.display = 'block';
+        });
+    }
+  </script>
+</body>
+</html>
