@@ -100,7 +100,7 @@
 </div>
 
 <script>
-  var SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxurmJxSF8o2ZmfC-3YA8OZ8p9XTgd43dSeI2JuPc-CX9WGXRfBA4OZzqxmvEhivHLsWA/exec';
+  var SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbyil2nLu7g724oFmdDHzfghNKexcJkkea3q7Gq2U1HfS6QX9ZY2jcDefVP6qQIXIS0T/exec';
   var currentPhone = '';
   var currentMember = '';
   var selectedFile = null;
@@ -184,7 +184,7 @@
           method: 'POST',
           headers: { 'Content-Type': 'text/plain' },
           body: JSON.stringify({
-            action: 'upload',
+            action: 'upload', secret: 'dlr2026xZ9qP',
             phone: currentPhone,
             docType: docType,
             fileName: newName,
